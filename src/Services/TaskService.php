@@ -39,11 +39,11 @@ class TaskService
      * @param Task $task
      * @return string
      */
-    public function printTaskInfo($task)
+    public function printTaskInfo($task, $from = null, $to = null)
     {
         $response = '#task' . $task->getUniqByUser() . ' ' . $task->getName() . PHP_EOL;
         $response .= 'Due at <strong>'.$task->getDateDue()->format('d.m.Y').'</strong>' . PHP_EOL;
-        $response .= 'Efforts: ' . $this->getEffortTimeForTask($task) . PHP_EOL;
+        $response .= 'Efforts: ' . $this->getEffortTimeForTask($task, $from, $to) . PHP_EOL;
         $response .= 'Status: <strong>' . $this->printStatusString($task) .'</strong>';
         return $response;
     }
@@ -134,15 +134,23 @@ class TaskService
      * @param Task $task
      * @return string
      */
-    public function getEffortTimeForTask($task)
+    public function getEffortTimeForTask($task, $from = null, $to = null)
     {
         $efforts = $this->em->getRepository(TaskEffort::class)
-            ->findBy([
-                'user_id' => $task->getUserId(),
-                'task_id' => $task->getId()
-            ], [
-                'date_created' => 'ASC'
-            ]);
+            ->createQueryBuilder('e')
+            ->andWhere('e.user_id = :userId')
+            ->andWhere('e.task_id = :taskId')
+            ->setParameter('userId', $task->getUserId())
+            ->setParameter('taskId', $task->getId());
+        if($from) {
+            $efforts->andWhere('e.date_effort >= :dtFrom');
+            $efforts->setParameter('dtFrom', $from);
+        }
+        if($to) {
+            $efforts->andWhere('e.date_effort <= :dtTo');
+            $efforts->setParameter('dtTo', $to);
+        }
+        $efforts = $efforts->addOrderBy('e.date_created','ASC')->getQuery()->getResult();
         $hours = $minutes = 0;
         /** @var TaskEffort $effort */
         foreach ($efforts as $effort)
@@ -194,6 +202,40 @@ class TaskService
             return 1;
         }
         return $lastTask->getUniqByUser() + 1;
+    }
+
+    /**
+     * @param ChatUser $user
+     * @return array
+     */
+    public function getTasksWithEfforts($user, $from, $to)
+    {
+        $efforts = $this->em->getRepository(TaskEffort::class)
+            ->createQueryBuilder('e')
+            ->select('e.task_id')
+            ->andWhere('e.user_id = :user_id')
+            ->setParameter('user_id', $user->getId());
+        if($from) {
+            $efforts->andWhere('e.date_effort >= :dtFrom');
+            $efforts->setParameter('dtFrom', $from);
+        }
+        if($to) {
+            $efforts->andWhere('e.date_effort <= :dtTo');
+            $efforts->setParameter('dtTo', $to);
+        }
+        $efforts = $efforts->getQuery()->getArrayResult();
+        $taskIds = [];
+        foreach ($efforts as $effort) {
+            $taskIds[] = $effort['task_id'];
+        }
+        if(empty($taskIds)) {
+            return [];
+        }
+        return $this->em->getRepository(Task::class)
+            ->findBy([
+                'id' => $taskIds,
+                'is_deleted' => false
+            ]);
     }
 
     /**

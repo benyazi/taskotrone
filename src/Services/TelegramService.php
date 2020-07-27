@@ -1,6 +1,7 @@
 <?php
 namespace App\Services;
 
+use App\Commands\EffortListCommand;
 use App\Commands\NewTaskCommand;
 use App\Commands\StartCommand;
 use App\Commands\TaskDeleteCommand;
@@ -30,6 +31,7 @@ class TelegramService
         $telegram->addCommand(new TaskDeleteCommand($this->userService, $this->taskService));
         $telegram->addCommand(new TaskEffortCommand($this->userService, $this->taskService));
         $telegram->addCommand(new TaskEndCommand($this->userService, $this->taskService));
+        $telegram->addCommand(new EffortListCommand($this->userService, $this->taskService));
         return $telegram;
     }
 
